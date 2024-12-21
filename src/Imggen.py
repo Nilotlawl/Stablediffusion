@@ -63,28 +63,46 @@ def load_sd_model():
 def generate_mask(image, mask_generator, target_object):
     """
     Generate automatic mask for the target object in the image
-    
-    Args:
-        image: Input image (numpy array)
-        mask_generator: SAM mask generator
-        target_object: String describing the object to mask
-    
-    Returns:
-        Binary mask array
     """
     # Generate all possible masks
     masks = mask_generator.generate(image)
     
-    # Convert masks to binary format
+    # Convert masks to binary format with additional logic for person detection
     binary_masks = []
     for mask in masks:
+        # Create binary mask
         binary_mask = np.zeros(image.shape[:2], dtype=np.uint8)
-        binary_mask[mask['segmentation']] = 255
-        binary_masks.append(binary_mask)
+        
+        # Check if this mask is likely to be a person based on aspect ratio and position
+        bbox = mask['bbox']  # [x, y, width, height]
+        aspect_ratio = bbox[3] / bbox[2]  # height/width
+        is_vertical = aspect_ratio > 1.2  # People are usually taller than wide
+        
+        # Check if mask is in reasonable size range (not too small or too large)
+        area_ratio = mask['area'] / (image.shape[0] * image.shape[1])
+        reasonable_size = 0.05 < area_ratio < 0.7
+        
+        if is_vertical and reasonable_size:
+            binary_mask[mask['segmentation']] = 255
+            binary_masks.append({
+                'mask': binary_mask,
+                'score': mask['predicted_iou'] * (1 if is_vertical else 0.5),
+                'area': mask['area']
+            })
     
-    # TODO: Add logic to select the most appropriate mask based on target_object
-    # For now, return the largest mask
-    return max(binary_masks, key=np.sum)
+    # If no suitable masks found, fallback to largest mask
+    if not binary_masks:
+        return generate_fallback_mask(masks, image.shape[:2])
+    
+    # Return the mask with highest score
+    return max(binary_masks, key=lambda x: x['score'])['mask']
+
+def generate_fallback_mask(masks, shape):
+    """Fallback to basic mask generation"""
+    binary_mask = np.zeros(shape, dtype=np.uint8)
+    largest_mask = max(masks, key=lambda x: x['area'])
+    binary_mask[largest_mask['segmentation']] = 255
+    return binary_mask
 
 def replace_object(image_path, target_object, replacement_prompt, sd_pipeline, mask_generator):
     """
@@ -162,7 +180,7 @@ def main():
     # Rest of your code remains the same
     image_url =  r"D:\Stable diffusion\akhacouple.webp"
     target_object = "person"
-    replacement_prompt = "a person wearing a spacesuit on mars, high quality, detailed"
+    replacement_prompt = "Two people wearing spacesuits standing in a green mountainous landscape, high quality, detailed, realistic"
     
     original, mask, result = replace_object(
         image_url,
