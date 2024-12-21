@@ -142,5 +142,4 @@ zipp==3.21.0
 
 ---
 
-## **License**
-This project is licensed under the MIT License.
+
