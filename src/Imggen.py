@@ -7,7 +7,7 @@
 import torch
 import cv2
 import matplotlib.pyplot as plt
-from diffusers import StableDiffusionPipeline, AutoPipelineForInpainting
+from diffusers import StableDiffusionInpaintPipeline, AutoPipelineForInpainting
 from transformers import pipeline
 from segment_anything import SamAutomaticMaskGenerator, sam_model_registry
 import numpy as np
@@ -21,10 +21,21 @@ print(f"Using device: {device}")
 
 # Download and load the SAM model for automatic mask generation
 def download_sam_model():
-    url = "https://dl.fbaipublicfiles.com/segment_anything/sam_vit_h_4b8939.pth"
-    response = requests.get(url)
-    with open("sam_vit_h_4b8939.pth", "wb") as f:
-        f.write(response.content)
+    """
+    Download the SAM model if it doesn't exist
+    """
+    import os
+    
+    filename = "sam_vit_h_4b8939.pth"
+    if not os.path.exists(filename):
+        print("Downloading SAM model...")
+        url = "https://dl.fbaipublicfiles.com/segment_anything/sam_vit_h_4b8939.pth"
+        response = requests.get(url)
+        with open(filename, "wb") as f:
+            f.write(response.content)
+        print("Download completed!")
+    else:
+        print("SAM model already exists.")
 
 def load_sam_model():
     """
@@ -40,11 +51,11 @@ def load_sd_model():
     """
     Load and configure the Stable Diffusion pipeline with model quantization
     """
-    model_id = "stabilityai/stable-diffusion-3-inpainting"
+    model_id = "runwayml/stable-diffusion-inpainting"
+    
     pipeline = AutoPipelineForInpainting.from_pretrained(
         model_id,
-        torch_dtype=torch.float16,
-        variant="fp16"
+        torch_dtype=torch.float16
     )
     pipeline.to(device)
     return pipeline
@@ -140,17 +151,19 @@ def display_results(original, mask, result):
 
 # Main execution
 def main():
-    # Load models
+    # Download and load models
+    print("Setting up models...")
+    download_sam_model()  # Add this line
+    
     print("Loading models...")
     mask_generator = load_sam_model()
     sd_pipeline = load_sd_model()
     
-    # Example usage
-    image_url = "YOUR_IMAGE_URL_HERE"
-    target_object = "person"  # Object to replace
+    # Rest of your code remains the same
+    image_url =  r"D:\Stable diffusion\akhacouple.webp"
+    target_object = "person"
     replacement_prompt = "a person wearing a spacesuit on mars, high quality, detailed"
     
-    # Process image
     original, mask, result = replace_object(
         image_url,
         target_object,
@@ -159,7 +172,6 @@ def main():
         mask_generator
     )
     
-    # Display results
     display_results(original, mask, result)
 
 if __name__ == "__main__":
